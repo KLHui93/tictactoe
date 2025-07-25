@@ -376,89 +376,104 @@
             decay: 1.5,      // 混响衰减时间
             preDelay: 0.01,  // 预延迟
             wet: 0.2         // 湿信号（混响）混合比例
-        }).toDestination(); // 混响效果器输出到最终目的地（扬声器）
+        }); // 不直接连接到目的地
 
         // 放置标记音效合成器
-        const placeMarkSynth = new Tone.MembraneSynth().connect(reverb); // 连接到混响
+        const placeMarkSynth = new Tone.MembraneSynth(); // 不直接连接到目的地
         // 胜利音效合成器
         const winSynth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "sawtooth" },
             envelope: {
                 attack: 0.05,
-                decay: 0.3,
-                sustain: 0.4,
-                release: 0.8,
+                decay: 0.2, // 缩短衰减时间
+                sustain: 0.1, // 缩短延音时间
+                release: 0.2, // 显著缩短释放时间
             },
-        }).connect(reverb); // 连接到混响
+        }); // 不直接连接到目的地
         // 平局音效合成器
         const drawSynth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "triangle" },
             envelope: {
                 attack: 0.02,
-                decay: 0.2,
-                sustain: 0.3,
-                release: 0.5,
+                decay: 0.1,
+                sustain: 0.05, // 进一步缩短延音时间，使其更轻柔
+                release: 0.1,
             },
-        }).connect(reverb); // 连接到混响
+        }); // 不直接连接到目的地
         // 重新开始音效合成器
-        const restartSynth = new Tone.Synth().connect(reverb); // 连接到混响
+        const restartSynth = new Tone.Synth(); // 不直接连接到目的地
 
-        // 背景音乐部分
+        // 背景音乐部分（延迟初始化和连接）
+        let bgMusicVolume;
+        let bgMusicSynth;
         let musicLoop;
-        let bgMusicVolume = new Tone.Volume(-15); // 初始音量为 -15dB
-        // 使用 DuoSynth 制作更丰富的背景音乐声音
-        const bgMusicSynth = new Tone.DuoSynth({
-            vibratoAmount: 0.5,
-            vibratoRate: 5,
-            harmonicity: 1.5,
-            voice0: {
-                volume: -10,
-                portamento: 0,
-                oscillator: { type: "sine" },
-                envelope: {
-                    attack: 0.01,
-                    decay: 0.3,
-                    sustain: 0.2,
-                    release: 1
-                },
-                filterEnvelope: {
-                    baseFrequency: 200,
-                    octaves: 2,
-                    attack: 0.01,
-                    decay: 0.1,
-                    sustain: 0.5,
-                    release: 0.8
-                }
-            },
-            voice1: {
-                volume: -10,
-                portamento: 0,
-                oscillator: { type: "sine" },
-                envelope: {
-                    attack: 0.01,
-                    decay: 0.3,
-                    sustain: 0.2,
-                    release: 1
-                },
-                filterEnvelope: {
-                    baseFrequency: 200,
-                    octaves: 2,
-                    attack: 0.01,
-                    decay: 0.1,
-                    sustain: 0.5,
-                    release: 0.8
-                }
-            }
-        }).connect(bgMusicVolume); // 背景音乐连接到其音量控制
-        bgMusicVolume.connect(reverb); // 音量控制再连接到混响
 
         // 初始化音频上下文的函数
         async function initializeAudioContext() {
             if (!audioContextReady) {
                 try {
+                    // 必须先启动 Tone.js 上下文
                     await Tone.start();
                     console.log("音频上下文已初始化");
                     audioContextReady = true;
+
+                    // 现在连接所有合成器和效果器到主输出
+                    reverb.toDestination();
+                    placeMarkSynth.connect(reverb);
+                    winSynth.connect(reverb);
+                    drawSynth.connect(reverb);
+                    restartSynth.connect(reverb);
+
+                    // 初始化背景音乐组件并连接
+                    bgMusicVolume = new Tone.Volume(-15); // 初始音量为 -15dB
+                    bgMusicVolume.connect(reverb); // 音量控制再连接到混响
+
+                    bgMusicSynth = new Tone.DuoSynth({
+                        vibratoAmount: 0.5,
+                        vibratoRate: 5,
+                        harmonicity: 1.5,
+                        voice0: {
+                            volume: -10,
+                            portamento: 0,
+                            oscillator: { type: "sine" },
+                            envelope: {
+                                attack: 0.01,
+                                decay: 0.3,
+                                sustain: 0.2,
+                                release: 1
+                            },
+                            filterEnvelope: {
+                                baseFrequency: 200,
+                                octaves: 2,
+                                attack: 0.01,
+                                decay: 0.1,
+                                sustain: 0.5,
+                                release: 0.8
+                            }
+                        },
+                        voice1: {
+                            volume: -10,
+                            portamento: 0,
+                            oscillator: { type: "sine" },
+                            envelope: {
+                                attack: 0.01,
+                                decay: 0.3,
+                                sustain: 0.2,
+                                release: 1
+                            },
+                            filterEnvelope: {
+                                baseFrequency: 200,
+                                octaves: 2,
+                                attack: 0.01,
+                                decay: 0.1,
+                                sustain: 0.5,
+                                release: 0.8
+                            }
+                        }
+                    }).connect(bgMusicVolume); // 背景音乐连接到其音量控制
+
+                    // 确保 bgMusicSynth 已定义后再设置音乐循环
+                    setupMusic();
                     // 一旦音频上下文准备好，就尝试开始播放音乐
                     toggleMusic();
                     messageDisplay.innerHTML = `玩家 X 的回合`;
@@ -471,7 +486,8 @@
 
         // 音乐播放器，只在音频上下文初始化后创建
         function setupMusic() {
-            if (musicLoop) return; // 防止重复创建
+            // 只有当 bgMusicSynth 已经初始化且 musicLoop 未创建时才执行
+            if (musicLoop || !bgMusicSynth) return;
 
             // 创建一个更有趣的音乐序列
             const melody = [
@@ -492,7 +508,7 @@
             musicLoop.loop = true; // 循环播放
             musicLoop.loopEnd = '2m'; // 循环长度2小节
             Tone.Transport.bpm.value = 100; // 设置BPM
-            Tone.Transport.start(); // 启动传输，但音乐暂停
+            // Tone.Transport.start(); // 当 musicLoop.start(0) 调用时，如果未启动则会自动启动 Transport
         }
 
         // 音乐开关函数
@@ -505,15 +521,19 @@
 
             if (!musicPlaying) {
                 setupMusic(); // 确保音乐已设置
-                musicLoop.start(0); // 从头开始播放
-                musicPlaying = true;
-                musicToggleButton.textContent = '🔇'; // 显示静音图标
-                console.log("背景音乐已播放");
+                if (musicLoop) { // 只有当 musicLoop 存在时才启动
+                    musicLoop.start(0); // 从头开始播放
+                    musicPlaying = true;
+                    musicToggleButton.textContent = '🔇'; // 显示静音图标
+                    console.log("背景音乐已播放");
+                }
             } else {
-                musicLoop.stop(); // 停止播放
-                musicPlaying = false;
-                musicToggleButton.textContent = '🎵'; // 显示播放图标
-                console.log("背景音乐已暂停");
+                if (musicLoop) { // 只有当 musicLoop 存在时才停止
+                    musicLoop.stop(); // 停止播放
+                    musicPlaying = false;
+                    musicToggleButton.textContent = '🎵'; // 显示播放图标
+                    console.log("背景音乐已暂停");
+                }
             }
         }
 
@@ -587,8 +607,8 @@
             if (roundWon) {
                 messageDisplay.innerHTML = `玩家 ${currentPlayer} 获胜! 🎉`;
                 gameActive = false; // 游戏结束
-                // 播放胜利音效
-                winSynth.triggerAttackRelease(['C5', 'E5', 'G5'], '1s');
+                // 播放胜利音效，并缩短持续时间
+                winSynth.triggerAttackRelease(['C5', 'E5', 'G5'], '0.6s');
 
                 // 为获胜的单元格添加动画类
                 winningLine.forEach(index => {
@@ -602,8 +622,9 @@
             if (roundDraw) {
                 messageDisplay.innerHTML = `平局! 🤝`;
                 gameActive = false; // 游戏结束
-                // 播放平局音效
-                drawSynth.triggerAttackRelease(['C4', 'Fs4', 'B4'], '0.8s');
+                // 播放平局音效，并缩短持续时间
+                // 将和弦改为更柔和的D小调，并缩短持续时间
+                drawSynth.triggerAttackRelease(['D4', 'F4', 'A4'], '0.3s');
                 return;
             }
 
